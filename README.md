@@ -10,7 +10,11 @@ Study notes for the *Data Mining* course (Politecnico di Milano, 2026/27).
 3. [k-means](#3-k-means)
 4. [Hierarchical Clustering / 层次聚类](#4-hierarchical-clustering--层次聚类)
 5. [DBSCAN](#5-dbscan)
-6. [Common Mistakes / 易错点](#6-common-mistakes--易错点)
+6. [Regression Basics / 线性回归基础](#6-regression-basics--线性回归基础)
+7. [Model Evaluation: train / test / CV / 模型评估](#7-model-evaluation-train--test--cv--模型评估)
+8. [Lasso, Ridge & Standardization / 正则化与标准化](#8-lasso-ridge--standardization--正则化与标准化)
+9. [Pipeline Template (exam) / Pipeline 万能模板](#9-pipeline-template-exam--pipeline-万能模板)
+10. [Common Mistakes / 易错点](#10-common-mistakes--易错点)
 
 ---
 
@@ -162,7 +166,101 @@ Core points within each other's neighbourhood form one cluster; border points jo
 
 ---
 
-## 6. Common Mistakes / 易错点
+## 6. Regression Basics / 线性回归基础
+
+**Least squares / 最小二乘:** fit the line y = a + b·x that minimises the sum of squared residuals.
+找一条直线 y = a + b·x，让所有残差的平方和最小。
+
+| Term / 术语 | Meaning / 含义 |
+| --- | --- |
+| intercept a | value of y when x = 0 / x = 0 时的 y |
+| slope b | how much y changes when x increases by 1 / x 每增加 1，y 变多少 |
+| residual | y − ŷ (true − predicted) / 真实值 − 预测值 |
+| MSE | mean of squared residuals; **smaller is better** / 残差平方的平均，越小越好 |
+| R² | share of variance explained (0–1); for simple regression R² = r² / 解释了多少变化，越接近 1 越好 |
+
+**Calculator (fx-991CN X) / 计算器:** MENU → 6 → 2 (y=a+bx) → enter data → OPTN → 回归计算 gives a, b, r.
+⚠️ Some screens show y = ax + b: **the number multiplied by x is always the slope**.
+⚠️ 有的屏幕写 y = ax + b：**乘以 x 的那个数永远是斜率**。
+
+---
+
+## 7. Model Evaluation: train / test / CV / 模型评估
+
+**Analogy / 比喻:** training set = textbook, cross-validation = mock exams, test set = the final exam (used **once**, at the end).
+训练集 = 课本，交叉验证 = 模拟题，测试集 = 期末考（只能在最后用一次）。
+
+| Situation / 情况 | Training error | Test error |
+| --- | --- | --- |
+| Underfitting / 欠拟合 (model too simple) | high / 高 | high / 高 |
+| Overfitting / 过拟合 (memorised the training data) | low / 低 | **much higher** / 高很多 |
+
+**10-fold cross-validation / 10 折交叉验证:** split the training set into 10 parts; train on 9, validate on 1; repeat 10 times and average the error. Use it to **choose parameters**.
+把训练集分成 10 份，用 9 份训练、1 份验证，轮 10 次取平均误差。用来**选参数**。
+
+---
+
+## 8. Lasso, Ridge & Standardization / 正则化与标准化
+
+Both add a penalty on large coefficients to reduce overfitting; α controls the strength.
+两者都惩罚过大的系数来防止过拟合，α 控制惩罚力度。
+
+| | Lasso (L1) | Ridge (L2) |
+| --- | --- | --- |
+| Effect / 效果 | can set coefficients **exactly to 0** → feature selection / 能把系数压成 0，自动挑特征 | shrinks coefficients but **not to 0** / 只压小，不归零 |
+
+| α | Result / 结果 |
+| --- | --- |
+| too small / 太小 | almost no penalty → **overfitting** / 几乎不惩罚 → 过拟合 |
+| too large / 太大 | everything shrunk → **underfitting** / 全被压没 → 欠拟合 |
+| best / 最佳 | chosen by **cross-validation on the training set**, never by the test set / 在训练集上用 CV 选，绝不用测试集选 |
+
+**Standardization (StandardScaler) / 标准化:** z = (x − mean) ÷ std.
+Without it, features with small numbers (e.g. number of rooms 1–5) need big coefficients and get punished unfairly by Lasso/Ridge.
+不标准化的话，数值小的特征（如房间数 1–5）需要很大的系数，会被 Lasso/Ridge 不公平地惩罚。
+
+- Example / 例: rooms mean 3, std 1 → 5 rooms → (5 − 3) ÷ 1 = **2** ("2 std above average" / 比平均高 2 个标准差)
+- Mean and std are computed on the **training set only**; otherwise it is **data leakage** / 平均值和标准差只能用训练集算，否则就是数据泄露
+- **Decision trees do not need scaling:** they split on one feature at a time ("area > 100?"), and scaling does not change the order of values / 决策树不需要标准化：每次只问一个特征大于还是小于某个数，标准化不改变大小顺序
+
+---
+
+## 9. Pipeline Template (exam) / Pipeline 万能模板
+
+Pipeline design is the most frequent exam problem (10 of 30 problems in recent exams). The answer is **python-like pseudo-code**: syntax errors are not penalised; the **steps** are graded.
+Pipeline 设计是最常考的题型（近年 30 题里 10 题）。答案写伪代码，语法错不扣分，看的是**步骤**对不对。
+
+**Mnemonic / 口诀:** lock the test set → scale → choose the parameter by CV → score on test once
+先锁 test → 标准化 → CV 选参数 → test 打分（只用一次）
+
+```python
+# hold out test set, used only once at the end
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+# standardize features, fit on training data only
+pipeline = Pipeline([StandardScaler(), MODEL()])
+# choose parameter with 10-fold cross-validation
+grid = GridSearchCV(pipeline, param_grid={'PARAM': [...]}, cv=10)
+grid.fit(X_train, y_train)
+# final assessment on test set
+y_pred = grid.predict(X_test)
+print(METRIC(y_test, y_pred))
+```
+
+Only three blanks change / 只换三个空:
+
+| Task / 任务 | MODEL | PARAM | METRIC |
+| --- | --- | --- | --- |
+| Predict a number (regression) / 预测数字 | Lasso / Ridge | alpha | MSE, R² |
+| Predict a class (classification) / 预测类别 | DecisionTreeClassifier | max_depth | accuracy |
+
+- `fit` = train the model on training data / 用训练集训练
+- `predict` = use the trained model to predict; **never fit on the test set** / 用训练好的模型预测，绝不在 test set 上 fit
+- If test MSE ≫ CV MSE → overfitting / test 的 MSE 比 CV 大很多 → 过拟合
+- Trees: drop StandardScaler and write `# no scaling needed for trees` / 树模型可以去掉标准化并写一句理由
+
+---
+
+## 10. Common Mistakes / 易错点
 
 - [ ] Re-check the conclusion after comparing numbers / 比较大小后再核对一遍结论
 - [ ] Compute means carefully: (1+3)÷2 = 2 / 求平均别算错
@@ -173,3 +271,7 @@ Core points within each other's neighbourhood form one cluster; border points jo
 - [ ] Read distance matrices directly; do not subtract / 距离矩阵直接查表
 - [ ] k-means has no radius; eps belongs to DBSCAN / k-means 没有半径，半径是 DBSCAN 的
 - [ ] Wrong answers lose points: leave blank what you don't know, and justify every answer ("adequately motivated") / 答错倒扣分，不会的宁可空着；每题要写理由
+- [ ] Calculator shows y = ax + b: the coefficient on x is the slope / 乘以 x 的是斜率，别把 a、b 搞反
+- [ ] Choose α by CV on the training set, never by the test set / α 用训练集 CV 选，不用 test set
+- [ ] Split first, then standardize (no data leakage) / 先分 train/test，再标准化
+- [ ] Regression → MSE / R²; classification → accuracy / 回归用 MSE/R²，分类用 accuracy
