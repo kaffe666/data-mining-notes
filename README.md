@@ -14,7 +14,9 @@ Study notes for the *Data Mining* course (Politecnico di Milano, 2026/27).
 7. [Model Evaluation: train / test / CV / 模型评估](#7-model-evaluation-train--test--cv--模型评估)
 8. [Lasso, Ridge & Standardization / 正则化与标准化](#8-lasso-ridge--standardization--正则化与标准化)
 9. [Pipeline Template (exam) / Pipeline 万能模板](#9-pipeline-template-exam--pipeline-万能模板)
-10. [Common Mistakes / 易错点](#10-common-mistakes--易错点)
+10. [Decision Trees / 决策树](#10-decision-trees--决策树)
+11. [Regression Tree Exam Problem (2025-06) / 回归树真题](#11-regression-tree-exam-problem-2025-06--回归树真题)
+12. [Common Mistakes / 易错点](#12-common-mistakes--易错点)
 
 ---
 
@@ -260,7 +262,87 @@ Only three blanks change / 只换三个空:
 
 ---
 
-## 10. Common Mistakes / 易错点
+## 10. Decision Trees / 决策树
+
+**Idea / 思路:** keep asking yes/no questions that split the data into purer and purer groups.
+一直问"是/否"问题，把数据分成越来越纯的小组。
+
+**Impurity measures / 不纯度（越小越纯）:**
+
+| Measure | Formula | Pure / 最纯 | 50:50 (two classes) |
+| --- | --- | --- | --- |
+| Gini | 1 − Σ p² | 0 | 0.5 |
+| Entropy | − Σ p · log₂ p | 0 | 1 |
+
+- Example / 例 8:2 → Gini = 1 − (0.8² + 0.2²) = **0.32**; Entropy = −(0.8 log₂0.8 + 0.2 log₂0.2) = **0.722**
+- A class with p = 0 is skipped (0 · log₂0 = 0); the calculator gives Math ERROR for log₂0 / 比例为 0 的类直接不算
+- Calculator / 计算器: use the `log□□` key for log₂
+
+**Choosing a split / 选分裂:**
+
+1. Impurity before the split (parent) / 分裂前的不纯度
+2. Impurity of each child, then the **weighted average** by number of samples / 两边各算，再按人数加权平均
+3. **Gain = before − after** (Gini gain or Information Gain); choose the split with the **largest gain** / 下降最多的问题最好
+
+**Example (10 emails, 5 spam / 5 normal) / 例:**
+
+| Question / 问题 | Children (spam:normal) | Gini after | Entropy after | Information Gain |
+| --- | --- | --- | --- | --- |
+| "free" / 免费 | 5:1 and 0:4 | 0.167 | 0.39 | **0.61** ✅ |
+| "link" / 链接 | 3:2 and 2:3 | 0.48 | 0.97 | 0.03 |
+
+- Gain = 0 → the question is useless / 问了等于没问
+- Perfect split (5:0 and 0:5) → impurity 0, gain = 0.5 (Gini) / 完美分裂
+- Trees need **no scaling**; if a tree is the best model, the data probably has **non-linear** relations / 树不需要标准化；树表现最好说明数据有非线性关系
+- Recent exams (2025–26) do **not** ask for hand-computed Gini/entropy; `criterion = 'gini' / 'entropy'` appears as a hyperparameter / 近两年真题没考手算 Gini，考的是回归树
+
+---
+
+## 11. Regression Tree Exam Problem (2025-06) / 回归树真题
+
+**Reading a node (scikit-learn plot) / 读节点:**
+
+| Field | Meaning / 含义 |
+| --- | --- |
+| `MD <= -0.1` | condition: **True → left**, False → right / 满足往左，不满足往右 |
+| `samples` | number of training samples in the node / 训练样本个数 |
+| `value` | **mean** of those samples = the prediction / 平均值 = 预测值 |
+| `squared_error` | **mean** squared error in the node (MSE) / 节点内误差²的平均 |
+
+⚠️ Negative numbers: −0.06 > −0.1, so `−0.06 <= −0.1` is False → right / 小心负数
+
+**Steps / 步骤:**
+
+1. **Predict** each test sample by walking down the tree / 顺着树走到叶子
+2. **Test RSS** = Σ(real − predicted)²
+3. **TSS** = Σ(real − mean of real)² — the error of a "dumb" model that always predicts the mean / 每次都猜平均值的笨模型的误差
+4. **R² = 1 − RSS ÷ TSS** — how much better than predicting the mean / 比猜平均值好多少
+5. **Training RSS** = Σ over leaves of (samples × squared_error) / 每个叶子 samples × squared_error 再相加
+
+| R² | Meaning / 含义 |
+| --- | --- |
+| 1 | perfect / 完美 |
+| 0 | same as predicting the mean / 和猜平均一样 |
+| < 0 | worse than predicting the mean (e.g. overfitting) / 比猜平均还差 |
+
+**Calculator (fx-991CN X) / 计算器:** `MENU → 6 → 2` (two-variable; re-selecting the type clears old data / 重新选类型会清空旧数据)
+
+| Goal / 要算 | x column | y column | Formula (insert variables with `OPTN`) |
+| --- | --- | --- | --- |
+| Test RSS | real | predicted | `Σx² − 2 × Σxy + Σy²` (求和计算) |
+| TSS | real | predicted | `n × σx²` (双变量计算; σx, not sx) |
+| R² in one line | real | predicted | `1 − (Σx² − 2Σxy + Σy²) ÷ (n × σx²)` |
+| Training RSS | samples | squared_error | `Σxy` |
+
+- Σ(x − y)² = Σx² − 2Σxy + Σy² (expand each row, then sum each column); it is **not** (Σx − Σy)²
+- n × σx² = Σ(x − x̄)²: the calculator already knows the mean / 平均值已经藏在 σx 里
+- ❌ Do **not** use the regression r² from the calculator: it refits its own line, so it is not the R² of the tree (here r² = 0.35, true R² = −0.07) / 不能用计算器的 r²
+
+**Answers / 答案:** predictions 22.80, 39.10, 39.10, 39.10, 53.90; test RSS = 1045.47; R² = −0.07; training RSS = 9223.75
+
+---
+
+## 12. Common Mistakes / 易错点
 
 - [ ] Re-check the conclusion after comparing numbers / 比较大小后再核对一遍结论
 - [ ] Compute means carefully: (1+3)÷2 = 2 / 求平均别算错
@@ -275,3 +357,9 @@ Only three blanks change / 只换三个空:
 - [ ] Choose α by CV on the training set, never by the test set / α 用训练集 CV 选，不用 test set
 - [ ] Split first, then standardize (no data leakage) / 先分 train/test，再标准化
 - [ ] Regression → MSE / R²; classification → accuracy / 回归用 MSE/R²，分类用 accuracy
+- [ ] Copy numbers carefully, check the decimal point / 抄数字核对小数点
+- [ ] Sanity-check R²: predictions close to real values → R² near 1 / R² 算完先看合不合理
+- [ ] Negative thresholds: −0.06 > −0.1 / 负数比较大小要小心
+- [ ] Single-variable mode: the 2nd column is FREQUENCY, not y / 单变量模式第二列是频数，不是 y
+- [ ] Minus key `−`, not `+` and not the negative sign `(−)` / 减号别按成加号或负号
+- [ ] Test RSS: Σx² − 2Σxy + Σy²; training RSS from leaves: Σxy / 两种 RSS 公式别混
