@@ -16,7 +16,9 @@ Study notes for the *Data Mining* course (Politecnico di Milano, 2026/27).
 9. [Pipeline Template (exam) / Pipeline 万能模板](#9-pipeline-template-exam--pipeline-万能模板)
 10. [Decision Trees / 决策树](#10-decision-trees--决策树)
 11. [Regression Tree Exam Problem (2025-06) / 回归树真题](#11-regression-tree-exam-problem-2025-06--回归树真题)
-12. [Common Mistakes / 易错点](#12-common-mistakes--易错点)
+12. [Explainability: Tree Contributions & MDI / 可解释性](#12-explainability-tree-contributions--mdi--可解释性)
+13. [Clustering Evaluation / 聚类评估](#13-clustering-evaluation--聚类评估)
+14. [Common Mistakes / 易错点](#14-common-mistakes--易错点)
 
 ---
 
@@ -336,13 +338,74 @@ Only three blanks change / 只换三个空:
 
 - Σ(x − y)² = Σx² − 2Σxy + Σy² (expand each row, then sum each column); it is **not** (Σx − Σy)²
 - n × σx² = Σ(x − x̄)²: the calculator already knows the mean / 平均值已经藏在 σx 里
+- σx, σx² divide by **N**; sx, sx² divide by **N − 1**. Both are reliable, pick the one the problem asks for (test with data 1, 5: σx² = 4, sx² = 8) / σ 组除以 N，s 组除以 N−1，都准，按题目选
 - ❌ Do **not** use the regression r² from the calculator: it refits its own line, so it is not the R² of the tree (here r² = 0.35, true R² = −0.07) / 不能用计算器的 r²
 
 **Answers / 答案:** predictions 22.80, 39.10, 39.10, 39.10, 53.90; test RSS = 1045.47; R² = −0.07; training RSS = 9223.75
 
 ---
 
-## 12. Common Mistakes / 易错点
+## 12. Explainability: Tree Contributions & MDI / 可解释性
+
+**Local contribution (one sample) / 局部贡献（一个样本）:** walk the sample down the tree; at every split, the **change of the node average** is credited to the feature asked at that split.
+顺着树走，每一步平均值的变化，记在这一步问的那个特征上。
+
+- Prediction = root average + sum of contributions / 预测值 = 起点 + 所有贡献（用来检查）
+- A feature never asked on the path → contribution **0** / 路上没问到的特征贡献为 0
+- A feature asked twice → add both changes / 同一特征问两次，两次变化相加
+- Use the **averages (W)**, not the sample counts in parentheses / 用平均值，不是括号里的样本数
+
+**Exam 2026-06:** root 250.0 W (10,000) → CPU_Load > 60% → Node A 340.0 W → Ambient_Temp > 25°C → Node B 390.0 W → Mem_Util > 80% → Leaf C 415.0 W
+
+| | Answer |
+| --- | --- |
+| Prediction | 415 W |
+| CPU_Load | +90 W (250 → 340) |
+| Ambient_Temp | +50 W (340 → 390) |
+| Memory_Utilization | +25 W (390 → 415) |
+
+**Global importance, MDI (Mean Decrease in Impurity) / 全局重要性:** for every split, impurity decrease = before − after, with "impurity" = **samples × squared_error** (squared_error = node variance). Credit the decrease to the split's feature and sum per feature; the largest total is the most important feature.
+每次分裂算"分裂前 − 分裂后"（乱的程度 = samples × squared_error），按特征加起来，最大的最重要。
+
+- Example (2025-06 tree), root split on MD: 200×171.7 − (126×100.5 + 74×50.5) = 34340 − 16400 = **17940 → MD**
+- Split HA ≤ 7.5: 126×100.5 − (31×64.0 + 95×65.8) = 12663 − 8235 = **4428 → HA**; CS never used → 0
+- Exam 2026-06 Q2: nodes show only averages and counts → **MDI cannot be computed**: the variance (squared error) of each node is missing. Same average can hide very different spreads (50, 50, 50 vs 0, 50, 100) / 只有平均值和个数算不了 MDI，缺方差
+
+---
+
+## 13. Clustering Evaluation / 聚类评估
+
+Example / 例: points on a line, A = {1, 2, 4}, B = {10, 12}.
+
+**Internal measures (no true labels needed) / 内部评估（只看距离）:**
+
+| Measure | Definition | Better |
+| --- | --- | --- |
+| Silhouette s(i) | a = mean distance to own cluster, b = mean distance to nearest other cluster, s = (b − a) ÷ max(a, b) | close to 1; ≈ 0 on the border; < 0 probably wrong cluster |
+| Overall silhouette | average of s(i) over all points | larger |
+| Dunn index | (min distance between points of different clusters) ÷ (max distance between points of the same cluster) | larger |
+| WSS | Σ squared distance to own centroid | smaller (but always decreases with k) |
+| BSS | Σ n_k × (centroid_k − overall centroid)² | larger |
+
+- Silhouette example: P(1): a = 2, b = 10, s = 0.8; Q(2) 0.833; R(4) 0.643; S(10) 0.739; T(12) 0.793 → overall **0.76**
+- Dunn example: 6 ÷ 3 = **2**; worse split A = {1, 2}, B = {4, 10, 12}: 2 ÷ 8 = 0.25 (recompute numerator and denominator for every split / 每种分法分子分母都要重找)
+- WSS = 4.67 + 2 = **6.67**; BSS = 3(7/3 − 5.8)² + 2(11 − 5.8)² = **90.13**; **TSS = WSS + BSS = 96.8**
+- Calculator: WSS of one cluster = n × σx² of that cluster; TSS = n × σx² of all points
+- **Elbow method / 肘部法:** plot WSS vs k and choose the k after which WSS stops dropping a lot (e.g. 80, 60, 20, 17, 15 for k = 2…6 → k = 4)
+
+**External measures (true labels needed) / 外部评估（需要真实类别）:**
+
+- **Purity** = Σ (size of the majority class in each cluster) ÷ N. Example: clusters (3 cats, 2 dogs) and (1 cat, 4 dogs) → (3 + 4) ÷ 10 = **0.7**
+- **Pairwise / 成对比较:** for every pair ask "same cluster?" and "same class?"
+  - **T/F**: both answers the same → True, different → False / 两个答案一样是 T，不一样是 F
+  - **P/N**: "same cluster?" yes → Positive, no → Negative / 同组是 P，不同组是 N
+  - TP = same cluster & same class; FP = same cluster, different class; FN = different cluster, same class; TN = different cluster & different class
+- **Rand** = (TP + TN) ÷ number of pairs; **Jaccard** = TP ÷ (TP + FP + FN) (ignores TN, stricter)
+- Example: a, b cats; c, d dogs; clusters {a, b, c}, {d} → TP 1, FP 2, FN 1, TN 2 → Rand = 0.5, Jaccard = 0.25
+
+---
+
+## 14. Common Mistakes / 易错点
 
 - [ ] Re-check the conclusion after comparing numbers / 比较大小后再核对一遍结论
 - [ ] Compute means carefully: (1+3)÷2 = 2 / 求平均别算错
@@ -363,3 +426,8 @@ Only three blanks change / 只换三个空:
 - [ ] Single-variable mode: the 2nd column is FREQUENCY, not y / 单变量模式第二列是频数，不是 y
 - [ ] Minus key `−`, not `+` and not the negative sign `(−)` / 减号别按成加号或负号
 - [ ] Test RSS: Σx² − 2Σxy + Σy²; training RSS from leaves: Σxy / 两种 RSS 公式别混
+- [ ] Tree contributions use node averages (W), not sample counts / 局部贡献用平均值，不是样本数
+- [ ] Dunn: recompute numerator and denominator for every clustering / Dunn 每种分法都要重新找分子分母
+- [ ] Jaccard denominator = TP + FP + FN / Jaccard 分母三个都要加
+- [ ] Don't pick the k with the smallest WSS; use the elbow / 不能直接选 WSS 最小的 k
+- [ ] When entering data, check digits are not swapped (0.793 vs 0.739) / 输入数字别颠倒
