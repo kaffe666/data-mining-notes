@@ -16,9 +16,10 @@ Study notes for the *Data Mining* course (Politecnico di Milano, 2026/27).
 9. [Pipeline Template (exam) / Pipeline 万能模板](#9-pipeline-template-exam--pipeline-万能模板)
 10. [Decision Trees / 决策树](#10-decision-trees--决策树)
 11. [Regression Tree Exam Problem (2025-06) / 回归树真题](#11-regression-tree-exam-problem-2025-06--回归树真题)
-12. [Explainability: Tree Contributions & MDI / 可解释性](#12-explainability-tree-contributions--mdi--可解释性)
+12. [Explainability / 可解释性](#12-explainability--可解释性)
 13. [Clustering Evaluation / 聚类评估](#13-clustering-evaluation--聚类评估)
-14. [Common Mistakes / 易错点](#14-common-mistakes--易错点)
+14. [Classification Metrics / 分类评估指标](#14-classification-metrics--分类评估指标)
+15. [Common Mistakes / 易错点](#15-common-mistakes--易错点)
 
 ---
 
@@ -345,7 +346,7 @@ Only three blanks change / 只换三个空:
 
 ---
 
-## 12. Explainability: Tree Contributions & MDI / 可解释性
+## 12. Explainability / 可解释性
 
 **Local contribution (one sample) / 局部贡献（一个样本）:** walk the sample down the tree; at every split, the **change of the node average** is credited to the feature asked at that split.
 顺着树走，每一步平均值的变化，记在这一步问的那个特征上。
@@ -370,6 +371,50 @@ Only three blanks change / 只换三个空:
 - Example (2025-06 tree), root split on MD: 200×171.7 − (126×100.5 + 74×50.5) = 34340 − 16400 = **17940 → MD**
 - Split HA ≤ 7.5: 126×100.5 − (31×64.0 + 95×65.8) = 12663 − 8235 = **4428 → HA**; CS never used → 0
 - Exam 2026-06 Q2: nodes show only averages and counts → **MDI cannot be computed**: the variance (squared error) of each node is missing. Same average can hide very different spreads (50, 50, 50 vs 0, 50, 100) / 只有平均值和个数算不了 MDI，缺方差
+
+**PDP (Partial Dependence Plot) / 部分依赖图 — global:** fix one feature to a value for **all** samples, keep the other features, predict and **average**; repeat for many values and plot the curve.
+把一个特征固定成某个值，其他特征不变，所有样本预测取平均，换不同的值连成曲线。
+
+- Example: price = area + 10 × rooms, rooms = 1, 2, 3 → area 50: (60 + 70 + 80) ÷ 3 = 70; area 80: 100
+- **ICE (Individual Conditional Expectation):** one curve per sample, no averaging; **PDP = average of the ICE curves**
+- **Exam 2024-06 trap:** a flat PDP does **not** mean the feature is useless; opposite effects can cancel out (Milan: price = area, Rome: price = 200 − area → average always 100). Check the ICE curves: crossing lines reveal it; parallel ICE lines mean the PDP is reliable / PDP 平不代表特征没用，效果可能抵消，看 ICE
+
+**SHAP (SHapley Additive exPlanations) — local (and global via the summary plot):** split "prediction − average prediction" fairly among features: each feature gets its **average marginal contribution over all orders** in which features are added.
+所有顺序都试一遍，取每个特征"加入前后的差"的平均。
+
+- Example: average 100; only area 130; only rooms 110; both 150 → order area→rooms: +30, +20; order rooms→area: +10, +40 → **SHAP area = 35, rooms = 15**; check 100 + 35 + 15 = 150
+- n features → n! orders (3 → 6), too many → **approximate by sampling (Monte Carlo)**:
+
+```python
+# approximate Shapley value of feature j for sample x
+contributions = []
+for m in range(M):                        # repeat M times
+    order = random_permutation(features)  # random order
+    before = predict(x, known = features before j in order)
+    after  = predict(x, known = features before j in order + j)
+    contributions.append(after - before)  # marginal contribution of j
+shap_j = mean(contributions)
+```
+
+- Larger M → more accurate, but slower / M 越大越准但越慢
+- **Summary plot:** each dot = a sample; x position = SHAP value (right raises the prediction, left lowers it); colour = feature value (red high, blue low); features sorted by importance (top = most important). Dots near 0 with mixed colours = little impact
+
+**LIME (Local Interpretable Model-agnostic Explanations) — local:** around the sample x, approximate the black box with a simple **linear model** ("the earth looks flat when you stand in Milan").
+
+1. Generate perturbed samples around x and predict them with the black box
+2. **Kernel**: weight each sample by its distance to x (closer = larger weight), so the surrogate fits only the neighbourhood of x
+3. Fit a weighted linear model; its **coefficients** are the explanation
+
+- **Kernel width (exam 2023-06):** too wide → far points distort the line, low **fidelity**; too narrow → too few effective points, unstable results. Unstable explanations → **increase** the width / 结果不稳定就调大宽度
+
+**Choosing a method (exam 2025-01) / 怎么选方法:**
+
+| | Local (one prediction) | Global (whole model) |
+| --- | --- | --- |
+| Intrinsically interpretable model (tree, linear) | decision path contributions, coefficients | MDI, coefficients |
+| Black box (post-hoc, model-agnostic) | **LIME, SHAP** | PDP, SHAP summary plot |
+
+> Example answer: explaining why one loan was approved is a **local** problem; with a black-box model use post-hoc model-agnostic methods (LIME, SHAP); with a tree or linear model inspect the decision path or the coefficients directly.
 
 ---
 
@@ -405,7 +450,40 @@ Example / 例: points on a line, A = {1, 2, 4}, B = {10, 12}.
 
 ---
 
-## 14. Common Mistakes / 易错点
+## 14. Classification Metrics / 分类评估指标
+
+**Confusion matrix / 混淆矩阵** (Positive = the model says "yes, found it", like a positive COVID test / 阳性 = 检测说"有"):
+
+- **TP**: says positive, truly positive / 测对了
+- **FP**: says positive, truly negative → **wrongly accused** / 冤枉
+- **FN**: says negative, truly positive → **missed** / 漏掉
+- **TN**: says negative, truly negative / 测对了
+
+Example: 10 emails, 4 spam; the filter flags 5, of which 3 are spam → TP 3, FP 2, FN 1, TN 4 (missing numbers = total − known)
+
+| Metric | Formula | Example |
+| --- | --- | --- |
+| Accuracy | (TP + TN) ÷ total | 0.7 |
+| Precision | TP ÷ (TP + FP) | 0.6 |
+| Recall (= TPR) | TP ÷ (TP + FN) | 0.75 |
+| F1 | 2 × P × R ÷ (P + R) | 0.67 |
+
+- Afraid of **missing** (FN) → **recall** (cancer screening): a missed patient is worse than an extra test
+- Afraid of **wrongly accusing** (FP) → **precision** (spam filter deleting an important email)
+- F1 lies between P and R, closer to the smaller one
+
+**ROC & AUC:**
+
+- The model outputs a score; **threshold**: score ≥ threshold → positive. Changing the threshold changes TP, FP, FN, TN
+- **TPR** = TP ÷ (TP + FN) (recall); **FPR** = FP ÷ (FP + TN) (share of negatives wrongly flagged)
+- ROC curve = (FPR, TPR) for every threshold; best point is the top-left corner **(0, 1)**
+- **AUC** = area under the ROC curve: 1 perfect, 0.5 random guessing
+- Example: scores 0.9 S, 0.8 S, 0.6 N, 0.4 S, 0.2 N; threshold 0.5 → TPR 2/3, FPR 1/2; threshold 0.7 → TPR 2/3, FPR 0 (better)
+- Pipeline exam: for classification, METRIC can be accuracy, f1_score or roc_auc_score
+
+---
+
+## 15. Common Mistakes / 易错点
 
 - [ ] Re-check the conclusion after comparing numbers / 比较大小后再核对一遍结论
 - [ ] Compute means carefully: (1+3)÷2 = 2 / 求平均别算错
@@ -431,3 +509,7 @@ Example / 例: points on a line, A = {1, 2, 4}, B = {10, 12}.
 - [ ] Jaccard denominator = TP + FP + FN / Jaccard 分母三个都要加
 - [ ] Don't pick the k with the smallest WSS; use the elbow / 不能直接选 WSS 最小的 k
 - [ ] When entering data, check digits are not swapped (0.793 vs 0.739) / 输入数字别颠倒
+- [ ] FP = wrongly accused, FN = missed; a missed spam email is FN, not FP / 漏掉永远是 FN
+- [ ] FPR uses FP of the current threshold; recompute everything when the threshold changes / 换阈值要重算
+- [ ] Shapley values must add up: average + all SHAP values = prediction / SHAP 值加起来要等于预测
+- [ ] LIME unstable → increase the kernel width / LIME 不稳定就调大 kernel 宽度
