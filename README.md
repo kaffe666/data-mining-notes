@@ -19,7 +19,10 @@ Study notes for the *Data Mining* course (Politecnico di Milano, 2026/27).
 12. [Explainability / 可解释性](#12-explainability--可解释性)
 13. [Clustering Evaluation / 聚类评估](#13-clustering-evaluation--聚类评估)
 14. [Classification Metrics / 分类评估指标](#14-classification-metrics--分类评估指标)
-15. [Common Mistakes / 易错点](#15-common-mistakes--易错点)
+15. [Ensemble Methods / 集成学习](#15-ensemble-methods--集成学习)
+16. [Preprocessing: PCA, Feature Selection, Discretization / 预处理](#16-preprocessing-pca-feature-selection-discretization--预处理)
+17. [k-Nearest Neighbors (kNN) / k 近邻](#17-k-nearest-neighbors-knn--k-近邻)
+18. [Common Mistakes / 易错点](#18-common-mistakes--易错点)
 
 ---
 
@@ -480,10 +483,144 @@ Example: 10 emails, 4 spam; the filter flags 5, of which 3 are spam → TP 3, FP
 - **AUC** = area under the ROC curve: 1 perfect, 0.5 random guessing
 - Example: scores 0.9 S, 0.8 S, 0.6 N, 0.4 S, 0.2 N; threshold 0.5 → TPR 2/3, FPR 1/2; threshold 0.7 → TPR 2/3, FPR 0 (better)
 - Pipeline exam: for classification, METRIC can be accuracy, f1_score or roc_auc_score
+- F1 shortcut: F1 = 2TP ÷ (2TP + FP + FN), same value, no rounding error / F1 快速公式，没有四舍五入误差
+- Precision looks at the Predicted Positive **column**, recall at the True Positive **row** / Precision 看列，Recall 看行
+- Exam answer boxes: rows = True, columns = Predicted (TP top-left, FN top-right, FP bottom-left, TN bottom-right); read the labels before filling in / 先看答案框的行列标签再填
 
 ---
 
-## 15. Common Mistakes / 易错点
+## 15. Ensemble Methods / 集成学习
+
+**Idea / 思路:** combine many models; classification → **majority vote**, regression → **average**.
+多个模型一起决定：分类用多数投票，回归取平均。
+
+| Method | How it works / 怎么做 | Mainly reduces / 主要降低 |
+| --- | --- | --- |
+| Bagging | each model is trained on a **bootstrap sample** (rows drawn at random with replacement), in parallel / 每个模型用有放回随机抽的样本训练（随机"行"），并行 | variance → overfitting / 方差（过拟合） |
+| Random forest | bagging + decision trees + a **random subset of features at every split** / 再加上每次分裂随机挑特征（随机"列"） | variance / 方差 |
+| Boosting (AdaBoost, gradient boosting) | models are trained **one after another**; each new model focuses on the errors of the previous ones / 依次训练，后面的重点学前面的错 | bias → underfitting / 偏差（欠拟合） |
+
+- **OOB (out-of-bag) samples / 袋外样本:** rows that were not drawn in a bootstrap sample can be used to test that model, without a separate test set / 没被抽到的样本可以直接拿来测试
+- **Why voting helps / 为什么投票有用:** 3 independent models, each wrong with probability 0.3. The vote is wrong when at least 2 are wrong: 3 × 0.3² × 0.7 + 0.3³ = 0.189 + 0.027 = **0.216** < 0.3
+- **Conditions / 前提:** the models must be **independent** and each error rate < 0.5; with error > 0.5 the vote gets **worse** / 模型要独立、错误率 < 0.5，否则投票反而更差
+
+---
+
+## 16. Preprocessing: PCA, Feature Selection, Discretization / 预处理
+
+**PCA (Principal Component Analysis) / 主成分分析:** merges correlated features into new directions (principal components) that keep the **largest variance**.
+把相关的特征合并成新的方向（主成分），保留方差最大的方向。
+
+- **Standardize first** (StandardScaler); otherwise the feature with the biggest numbers dominates / 先标准化，否则数值大的特征说了算
+- Number of components: add up the **explained variance** until 90–95% / 按 explained variance 累加到 90–95%
+- In a pipeline: after the scaler, before the model; **fit on the training set only** / 放在标准化之后、模型之前，只在训练集 fit
+- Drawback: the new features are **not interpretable**, so avoid PCA when the model must be explained / 新特征不好解释，需要解释模型时不适合
+
+**Feature selection / 特征选择:**
+
+| Type | How / 怎么做 | Pros and cons / 优缺点 |
+| --- | --- | --- |
+| Filter | score each feature with a statistic (e.g. correlation), no model / 用统计量打分，不训练模型 | fast, but ignores the model / 快，但不看模型 |
+| Wrapper | train the model on feature subsets and compare CV scores / 真的用模型试特征组合，比 CV 分数 | accurate but slow / 准但慢 |
+| Embedded | selection happens during training, e.g. **Lasso** sets coefficients to 0 / 训练时自动选，比如 Lasso 把系数压成 0 | no extra search / 不用另外搜索 |
+
+- **Hill climbing (wrapper) / 爬山法:** at each step add the feature that improves the CV score most; it can get stuck in a **local optimum** / 每步加最能提高 CV 分数的特征，可能卡在局部最优
+- A **genetic algorithm** helps to escape local optima / 遗传算法可以帮助跳出局部最优
+
+**Discretization / 离散化:** turn a numeric feature into bins / 把数值特征分段。
+
+| Method | Rule / 规则 |
+| --- | --- |
+| Equal-width / 等宽 | every bin has the **same length** / 每段长度一样 |
+| Equal-frequency / 等频 | every bin has the **same number of samples** / 每段样本数一样 |
+
+- Example (2 bins) / 例: 20, 22, 25, 30, 60, 80 → equal-frequency {20, 22, 25} and {30, 60, 80}; equal-width: (80 − 20) ÷ 2 = 30 → [20, 50) and [50, 80] → {20, 22, 25, 30} and {60, 80}
+
+---
+
+## 17. k-Nearest Neighbors (kNN) / k 近邻
+
+**Idea / 思路:** to predict a new point, find the **k closest training points**; classification → **majority vote**, regression → **average of their y**.
+找离新点最近的 k 个训练点：分类投票，回归取它们 y 的平均。
+
+- **k = number of neighbours, not a distance** / k 是邻居的个数，不是距离
+- The distance uses **only the features (x)**; y is what we predict / 距离只用特征算，y 是要预测的
+- **Lazy learner:** no training phase, the data is just stored / 没有训练过程，只是把数据存下来
+- **Scaling is required** (StandardScaler before kNN in the pipeline): otherwise the feature with big numbers dominates the distance (age vs income) / 必须先标准化
+- Binary classification: use an **odd k** to avoid tied votes / 二分类用奇数 k 避免平票
+- Regression example: (1, 10), (2, 14), (4, 20), (7, 30), new x = 3, k = 2 → nearest x = 2 and 4 → (14 + 20) ÷ 2 = **17**
+
+| k | Result / 结果 |
+| --- | --- |
+| too small (k = 1) | follows a single noisy point → **overfitting** / 被噪声点带偏 |
+| too large (k = all points) | always predicts the majority class → **underfitting** / 永远预测多数类 |
+| best / 最佳 | chosen by **cross-validation** / 用 CV 选 |
+
+**Distances / 距离:** Euclidean d = √(Δx₁² + Δx₂²); Manhattan d = |Δx₁| + |Δx₂|. Example (1, 2) → (7, 10): Euclidean **10**, Manhattan **14**. To rank neighbours, compare **d²** (no square root).
+只排序时比 d²，不用开根号。
+
+**Weighted kNN / 加权 kNN:** each neighbour votes with **w = 1/d** (real distance, with the square root), so closer points count more.
+越近票越重。例: A at d = √2 (w = 0.707) vs B at d = 2 and √5 (w = 0.5 + 0.447 = 0.947) → B; if A were at d = 0.5 (w = 2) → A. Weighting can change the result / 加权可以改变结果。
+
+**Exam 2023-02-07: 3-NN with 3-fold cross-validation / 真题**
+
+`KNeighborsClassifier(n_neighbors=3)`, `KFold(n_splits=3, shuffle=False)` → no shuffling, folds in order: p0–p3, p4–p7, p8–p11. Each fold is the test set once and the other two folds are the training set, so **every point is predicted once**.
+不打乱，按顺序切成 3 份；每份轮流当 test，其余两份当 training，每个点都被预测一次。
+
+| id | x0 | x1 | class | 3 nearest (d²) | predicted | result |
+| --- | --- | --- | --- | --- | --- | --- |
+| p0 | 6 | 7 | 0 | p10 (5), p6 (16), p4 (25) | 1 | FP |
+| p1 | 9 | 6 | 1 | p8 (4), p6 (18), p9 (20) | 1 | TP |
+| p2 | 5 | 13 | 0 | p5 (9), p10 (50), p7 (65) | 0 | TN |
+| p3 | 0 | 9 | 0 | p10 (25), p11 (65), p6 (72) | 1 | FP |
+| p4 | 6 | 2 | 1 | p11 (4), p10 (20), p0 / p1 (25, tie) | 1 | TP |
+| p5 | 8 | 13 | 0 | p2 (9), p0 (40), p1 (50) | 0 | TN |
+| p6 | 6 | 3 | 0 | p11 (5), p10 (13), p0 (16) | 1 | FP |
+| p7 | 13 | 14 | 0 | p2 (65), p8 (68), p1 (80) | 1 | FP |
+| p8 | 11 | 6 | 1 | p1 (4), p0 (26), p6 (34) | 0 | FN |
+| p9 | 13 | 4 | 1 | p1 (20), p6 (50), p4 (53) | 1 | TP |
+| p10 | 4 | 6 | 1 | p0 (5), p6 (13), p4 (20) | 0 | FN |
+| p11 | 4 | 2 | 1 | p4 (4), p6 (5), p0 (29) | 0 | FN |
+
+Exam answer-box layout (rows = True, columns = Predicted) / 答案框格式（行 = 真实，列 = 预测）:
+
+| | Predicted Positive | Predicted Negative |
+| --- | --- | --- |
+| **True Positive** | TP = 3 | FN = 3 |
+| **True Negative** | FP = 4 | TN = 2 |
+
+Accuracy = 5/12 = **0.42**; Precision = 3/7 = **0.43**; Recall = 3/6 = **0.50**; F1 = 6/13 = **0.46**
+
+**Fast method: draw, then compute only the unclear cases / 快速方法：画图，只算分不清的**
+
+If you compute every distance: d(pi, pj) = d(pj, pi), and only pairs from different folds are needed → 48 distances, not 96.
+如果全部手算：距离表对称，只需要不同 fold 之间的 48 个距离。
+
+Faster: draw the points and judge by eye / 更快：画图用眼睛判断。
+
+1. Draw the points on a grid: **shape = fold** (○ □ △), **filled orange = class 1, hollow blue = class 0**. When predicting a point, skip the points with the same shape / 形状 = fold，实心 = class 1；预测时跳过同形状的点
+2. Find the nearest points by eye, then use the shortcuts / 用眼睛找最近的，再用捷径:
+   - The 2 nearest have the same class → done / 最近 2 个同类 → 直接定
+   - The unclear candidates all have the same class, or every order gives the same vote → no calculation / 分不清的候选同类（或怎么排投票都一样）→ 不用算
+   - Same row or column → compare only the other coordinate / 同一行或同一列只比一个方向
+   - Only when it is unclear **and** the classes differ **and** the vote changes → compute d² (know 1²–15² by heart) / 只有这种情况才心算 d²（背熟 1²–15²）
+3. For p0–p3 only **5** distances had to be computed instead of 32 / p0–p3 只算了 5 次，原来要 32 次
+
+![Step 1: draw the points / 第 1 步：画图](images/knn-1-plot.png)
+
+![Cases without calculation: p0, p1 / 不用算的情况](images/knn-2-demo-p0-p1.png)
+
+![Cases that need calculation: p2, p3 / 要算的情况](images/knn-3-demo-p2-p3.png)
+
+**Calculator CALC (fx-991CN X) / 计算器:** `MENU 1`, type `(6 − X)² + (7 − Y)²` for test point (6, 7). X = `ALPHA )`, then press `)` once more to close the bracket; Y = `ALPHA S⇔D`. Press `CALC`, enter a training point as X?, Y?; press `CALC` again for the next point. For a new test point, edit 6 and 7 in the formula. Fraction → decimal: `S⇔D`.
+输入一次公式，之后只换数字。
+
+**Exam frequency / 出题频率:** in the 2023–2026 exams this hand-computed kNN problem appeared only on 2023-02-07 (3 versions); the other kNN questions are conceptual (comparing kNN with other classifiers, kNN regression inside a CV comparison).
+手算大题只出过这一次，其他是概念题。
+
+---
+
+## 18. Common Mistakes / 易错点
 
 - [ ] Re-check the conclusion after comparing numbers / 比较大小后再核对一遍结论
 - [ ] Compute means carefully: (1+3)÷2 = 2 / 求平均别算错
@@ -513,3 +650,8 @@ Example: 10 emails, 4 spam; the filter flags 5, of which 3 are spam → TP 3, FP
 - [ ] FPR uses FP of the current threshold; recompute everything when the threshold changes / 换阈值要重算
 - [ ] Shapley values must add up: average + all SHAP values = prediction / SHAP 值加起来要等于预测
 - [ ] LIME unstable → increase the kernel width / LIME 不稳定就调大 kernel 宽度
+- [ ] kNN: k is the number of neighbours, not a distance; the distance uses x only, never y / k 是邻居个数；距离只用 x
+- [ ] Square carefully: 13 − 7 = 6 → 36, not 25 / 平方别算错
+- [ ] P/N follows the prediction: true 0, predicted 0 → TN, not TP / P/N 看预测结果
+- [ ] Count the votes again: neighbours 0, 1, 1 → predict 1 / 投票再数一遍
+- [ ] Write final answers with two decimals: 0.50, not 1/2 / 答案写两位小数
