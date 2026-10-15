@@ -22,7 +22,8 @@ Study notes for the *Data Mining* course (Politecnico di Milano, 2026/27).
 15. [Ensemble Methods / 集成学习](#15-ensemble-methods--集成学习)
 16. [Preprocessing: PCA, Feature Selection, Discretization / 预处理](#16-preprocessing-pca-feature-selection-discretization--预处理)
 17. [k-Nearest Neighbors (kNN) / k 近邻](#17-k-nearest-neighbors-knn--k-近邻)
-18. [Common Mistakes / 易错点](#18-common-mistakes--易错点)
+18. [Naive Bayes / 朴素贝叶斯](#18-naive-bayes--朴素贝叶斯)
+19. [Common Mistakes / 易错点](#19-common-mistakes--易错点)
 
 ---
 
@@ -620,7 +621,77 @@ Faster: draw the points and judge by eye / 更快：画图用眼睛判断。
 
 ---
 
-## 18. Common Mistakes / 易错点
+## 18. Naive Bayes / 朴素贝叶斯
+
+**Idea / 思路:** for each class compute a score = P(class) × P(value₁ | class) × P(value₂ | class) × …; predict the class with the largest score.
+每个类别算一个分数，谁大选谁。
+
+- **Why multiply? / 为什么相乘:** P(spam) × P(free | spam) = 4/10 × 3/4 = 3/10 = share of all emails that are spam **and** contain "free". It is just counting / 相乘 = "是这一类而且有这个特征"的比例，其实就是数邮件
+- **Naive** = within one class the features are assumed **independent**, so their probabilities can be multiplied / 假设同一类里各特征互相独立
+- Example (10 emails: 4 spam, 6 normal; "free" in 3 spam, 1 normal; "money" in 2 spam, 3 normal): email with "free" → 3/10 vs 1/10 → spam; with "money" → 1/5 vs 3/10 → normal; with both → 3/20 vs 1/20 → spam
+
+**Laplace Estimator (all 4 exams ask for it) / 拉普拉斯平滑（4 道真题都要求）:**
+
+P(value | class) = (count + 1) ÷ (class size + number of possible values of that feature)
+
+- ⚠️ **Features: always +1**, for every value, whether a zero appears or not / 特征的概率全部 +1，和有没有 0 无关
+- ⚠️ **Class prior P(no), P(yes): never +1** (official answer 7/10 = 0.70, not 8/12) / 类别概率不加
+- The rule is triggered by the words **"using the Laplace Estimator"** in the question / 看到这个词组就全部 +1
+- Why it exists: a value that never appears in a class gives probability 0, and the whole product becomes 0 / 某个值出现 0 次会让整个乘积变成 0
+- Check: the probabilities of one feature within one class add up to 1 / 同一个特征同一类加起来 = 1
+
+**Procedure / 做题流程:**
+
+1. Count the classes → P(no), P(yes) / 数类别
+2. Split the table into the yes rows and the no rows, then build a **count table** / 先把表按 yes、no 拆开，再画计数表
+3. Apply Laplace / 套 Laplace
+4. Write two decimals; check each column sums to 1 / 写两位小数，检查加起来 = 1
+
+**Exam 2023-06-07 (no 7, yes 3) / 真题:**
+
+| Feature (k) | Value | no count | yes count | P(·\|no) | P(·\|yes) |
+| --- | --- | --- | --- | --- | --- |
+| type (3) | board | 2 | 1 | 3/10 = 0.30 | 2/6 = 0.33 |
+| | card | 3 | 0 | 4/10 = 0.40 | 1/6 = 0.17 |
+| | video | 2 | 2 | 3/10 = 0.30 | 3/6 = 0.50 |
+| players (2) | single | 6 | 1 | 7/9 = 0.78 | 2/5 = 0.40 |
+| | multiple | 1 | 2 | 2/9 = 0.22 | 3/5 = 0.60 |
+| gameplay (2) | collaborative | 5 | 2 | 6/9 = 0.67 | 3/5 = 0.60 |
+| | competitive | 2 | 1 | 3/9 = 0.33 | 2/5 = 0.40 |
+
+P(no) = 0.70, P(yes) = 0.30
+
+**Exam 2026-02-05 (no 5, yes 5):** P = 0.50 / 0.50; type board/card/video: no 0.38/0.38/0.25, yes 0.38/0.50/0.13; players single/multiple: no 0.57/0.43, yes 0.57/0.43; gameplay collaborative/competitive: no 0.57/0.43, yes 0.71/0.29
+
+**Predicted probabilities (exam 2025-01) / 预测概率:** "P(class=no | overcast, mild, normal, False)" = probability that a new case is no:
+
+1. score(no) = P(no) × all P(value | no); score(yes) = P(yes) × all P(value | yes)
+2. P(no | case) = score(no) ÷ (score(no) + score(yes)) — like 3 ÷ (3 + 1) in the spam example
+3. Calculator: store score(no) in A (`SHIFT RCL (−)`), score(yes) in B (`SHIFT RCL °'″`), then `A ÷ (A + B)`
+
+(Not practised yet / 还没练)
+
+**Formal derivation (exam 2026-06, theory) / 理论推导:**
+
+1. Bayes: P(y | x) = P(x | y) · P(y) ÷ P(x)
+2. Naive assumption: P(x | y) = P(x₁ | y) · P(x₂ | y) · … · P(xₙ | y)
+3. So P(y | x) = P(y) · ∏ P(xᵢ | y) ÷ P(x)
+4. P(x) is the same for every class → drop it → predict the y with the largest P(y) · ∏ P(xᵢ | y)
+
+Why normalise? Because P(x) was dropped, the scores no longer sum to 1, so divide by their sum.
+去掉了分母 P(x)，分数加起来不等于 1，所以要除以总和。
+
+**My questions while learning / 我学的时候卡住的地方:**
+
+- "Why multiply?" → it counts the rows that are this class **and** have this value (see above)
+- "The whole table at once is hard to read" → first split the rows by class, then count / 先拆开再数
+- "Players / yes / no?" → each row is a game; players = single / multiple player; top seller yes/no is the class
+- "Do I add +1 only where a 0 appears?" → no: every feature value +1, class prior never
+- "Does it depend on a word in the question?" → yes: "using the Laplace Estimator"
+
+---
+
+## 19. Common Mistakes / 易错点
 
 - [ ] Re-check the conclusion after comparing numbers / 比较大小后再核对一遍结论
 - [ ] Compute means carefully: (1+3)÷2 = 2 / 求平均别算错
@@ -655,3 +726,6 @@ Faster: draw the points and judge by eye / 更快：画图用眼睛判断。
 - [ ] P/N follows the prediction: true 0, predicted 0 → TN, not TP / P/N 看预测结果
 - [ ] Count the votes again: neighbours 0, 1, 1 → predict 1 / 投票再数一遍
 - [ ] Write final answers with two decimals: 0.50, not 1/2 / 答案写两位小数
+- [ ] Naive Bayes + Laplace: +1 for every feature value, never for P(class) / 特征全 +1，类别不加
+- [ ] Count table: keep the no / yes order, card was written swapped (0 3 instead of 3 0) / 计数别把 no、yes 写反
+- [ ] Each class column of one feature must add up to the class size (7, 3) / 每列计数加起来 = 这一组人数
